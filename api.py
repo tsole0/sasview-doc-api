@@ -42,7 +42,7 @@ def test():
         response = upload.response
 
 
-    return "Upload sucessful", 200
+    return "Upload successful", 200
 
 if __name__ == '__main__':
     app.run(debug=True)
