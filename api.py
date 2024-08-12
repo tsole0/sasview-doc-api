@@ -1,6 +1,11 @@
 from flask import Flask, request, jsonify
 import json
 
+from werkzeug.datastructures import ImmutableMultiDict, FileStorage
+
+from githubRequest import GitHubUploader
+from keychain import __api_key__
+
 app = Flask(__name__)
 
 @app.route('/post', methods=['POST'])
@@ -25,11 +30,19 @@ def test():
             print(f"Branches Exist: {branches_exist}")
         except json.JSONDecodeError:
             return "Invalid JSON data", 400
-
+        
     for filename in uploaded_files:
         print("Uploaded File:", filename)
-    
-    return '<p>testing</p>'
+        file_storage = uploaded_files[filename]
+
+        # Read the content of the file and decode it from bytestream
+        file_text = file_storage.read().decode('utf-8')
+
+        upload = GitHubUploader(filename, file_text, sasview_version, author, changes, branches_exist[filename])
+        response = upload.response
+
+
+    return "Upload sucessful", 200
 
 if __name__ == '__main__':
     app.run(debug=True)
