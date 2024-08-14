@@ -41,8 +41,10 @@ def test():
         upload = GitHubUploader(filename, file_text, sasview_version, author, changes, branches_exist[filename])
         response = upload.response
 
-
-    return "Upload successful", 200
+    if response == None:
+        return "Serverside error", 500
+    else:
+        return "Upload successful", 200
 
 if __name__ == '__main__':
     app.run(debug=True)
