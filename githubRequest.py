@@ -1,7 +1,11 @@
+import datetime
 import difflib
 import os
 import requests
+
+from IDDatabase import access_database
 from keychain import __api_key__
+from version import __version__
 
 class GitHubUploader:
     """
@@ -14,7 +18,8 @@ class GitHubUploader:
                  sasview_version,
                  author,
                  changes,
-                 branches_exist):
+                 branches_exist,
+                 root_url):
 
         self.filename = filename
         self.text = file_text
@@ -22,6 +27,7 @@ class GitHubUploader:
         self.author = author
         self.changes = changes
         self.branch_exist = branches_exist
+        self.root_url = root_url
 
         self.response = None
 
@@ -183,6 +189,12 @@ class GitHubUploader:
         ref_response.raise_for_status()
         return ref_response.json()
 
+    def getID(self):
+        """Get unique ID for the request."""
+        id = access_database(self.filename)
+        id = str(id).zfill(6) # Pad with zeros
+        return id
+
     def createPullRequest(self, branch_name):
         """Create a pull request for the new branch."""
         url = f"https://api.github.com/repos/SasView/sasview/pulls"
@@ -191,11 +203,32 @@ class GitHubUploader:
             "Accept": "application/vnd.github.v3+json"
         }
         data = {
-            "title": f"Patch for {self.filename} ({self.version})",
+            "title": f"User Patch for {os.path.basename(self.filename)} ({self.version})",
             "head": branch_name,
             "base": "main",
-            "body": f"{self.author}\n{self.changes}"
+            "body": self.getBody()
         }
         response = requests.post(url, json=data, headers=headers)
         response.raise_for_status()
         return response.json()
+    
+    def getBody(self):
+        """
+        Generate the body of the pull request.
+        """
+        return f"""\
+## Patch for {os.path.basename(self.filename)} ({self.version})
+Author: {self.author}
+SasView Version: {self.version}
+
+### Changes
+{self.changes}
+
+### Log
+```
+api: v.{__version__}
+time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+root: {self.root_url}
+request_id: {self.getID()}
+```
+"""

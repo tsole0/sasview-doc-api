@@ -37,8 +37,9 @@ def test():
 
         # Read the content of the file and decode it from bytestream
         file_text = file_storage.read().decode('utf-8')
+        root_url = f"{request.scheme}://{request.host}/"
 
-        upload = GitHubUploader(filename, file_text, sasview_version, author, changes, branches_exist[filename])
+        upload = GitHubUploader(filename, file_text, sasview_version, author, changes, branches_exist[filename], root_url)
         response = upload.response
 
     if response == None:
@@ -47,4 +48,4 @@ def test():
         return "Upload successful", 200
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, threaded=True)
