@@ -19,12 +19,14 @@ def test():
         try:
             data = json.loads(json_str)
             sasview_version = data.get('sasview_version')
+            file_hash = data.get('hash')
             author = data.get('author')
             changes = data.get('changes')
             branches_exist = data.get('branches_exist')
             
             # Print or return the extracted data for debugging
             print(f"SasView Version: {sasview_version}")
+            print(f"Hash: {file_hash}")
             print(f"Author: {author}")
             print(f"Changes: {changes}")
             print(f"Branches Exist: {branches_exist}")
@@ -39,13 +41,14 @@ def test():
         file_text = file_storage.read().decode('utf-8')
         root_url = f"{request.scheme}://{request.host}/"
 
-        upload = GitHubUploader(filename, file_text, sasview_version, author, changes, branches_exist[filename], root_url)
+        upload = GitHubUploader(filename, file_hash, file_text, sasview_version, author, changes, branches_exist[filename], root_url)
         response = upload.response
 
     if response == None:
         return "Serverside error", 500
     else:
-        return "Upload successful", 200
+        print(response)
+        return response, 200
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)

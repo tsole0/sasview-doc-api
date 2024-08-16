@@ -1,9 +1,8 @@
 import datetime
-import difflib
 import os
 import requests
 
-from IDDatabase import access_database
+from IDDatabase import newData, findBranch
 from keychain import __api_key__
 from version import __version__
 
@@ -14,6 +13,7 @@ class GitHubUploader:
 
     def __init__(self,
                  filename,
+                 hash,
                  file_text,
                  sasview_version,
                  author,
@@ -22,6 +22,7 @@ class GitHubUploader:
                  root_url):
 
         self.filename = filename
+        self.hash = hash
         self.text = file_text
         self.version = sasview_version
         self.author = author
@@ -29,7 +30,8 @@ class GitHubUploader:
         self.branch_exist = branches_exist
         self.root_url = root_url
 
-        self.response = None
+        self.response = None # Store the response here instead of returning it
+        self.branch_name = None # Store the branch name here
 
         self.version = self.processVersioning(self.version)
 
@@ -37,18 +39,17 @@ class GitHubUploader:
 
     def __main(self) -> None:
         commit_sha = self.getCommitShaFromTag(self.version, token=__api_key__)
-        print(commit_sha)
         if self.branch_exist:
-            # TODO: Find existing branch
+            print(findBranch(self.hash))
             pass
         else:
             if self.getOldVersion(commit_sha):
                 # Branch name must conform to github's branch naming conventions
-                new_branch_name = f"(user-{self.version}){os.path.basename(self.filename)}" 
-                self.createBranch(new_branch_name, commit_sha)
-                self.commitNewVersion(new_branch_name, self.text, commit_sha)
-                self.createPullRequest(new_branch_name)
-                self.response = "Upload successful"
+                self.branch_name = f"(user-{self.version}){os.path.basename(self.filename)}"
+                _, self.branch_name = self.createBranch(self.branch_name, commit_sha) # Branch name may have changed, so must re-assign variable
+                self.commitNewVersion(self.branch_name, self.text, commit_sha)
+                pull_request_info = self.createPullRequest(self.branch_name)
+                self.response = pull_request_info.get('html_url', 'Pull request created, but URL not found.')
             else:
                 print("File does not exist in the specified commit SHA.")
 
@@ -115,6 +116,12 @@ class GitHubUploader:
 
     def createBranch(self, branch_name, commit_sha):
         """Create a new branch in the repository."""
+        # Check to see if branch with same name already exists
+        i = 1
+        while self.branchExists(branch_name):
+            # Create a branch with a different name and check if it exists
+            branch_name = f"{branch_name.strip('1234567890-')}-{str(i)}"
+            i += 1
         url = f"https://api.github.com/repos/SasView/sasview/git/refs"
         headers = {
             "Authorization": f"token {__api_key__}",
@@ -126,7 +133,23 @@ class GitHubUploader:
         }
         response = requests.post(url, json=data, headers=headers)
         response.raise_for_status()
-        return response.json()
+        return response.json(), branch_name
+    
+    @staticmethod
+    def branchExists(branch_name):
+        """Return True if branch exists"""
+        url = f"https://api.github.com/repos/SasView/sasview/branches/{branch_name}"
+        headers = {
+            "Authorization": f"token {__api_key__}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return True
+        elif response.status_code == 404:
+            return False
+        else:
+            response.raise_for_status()
 
     def commitNewVersion(self, branch_name, new_content, base_commit_sha):
         """Commit the new version of the file to the specified branch."""
@@ -191,7 +214,7 @@ class GitHubUploader:
 
     def getID(self):
         """Get unique ID for the request."""
-        id = access_database(self.filename)
+        id = newData(self.filename, self.hash, self.branch_name)
         id = str(id).zfill(6) # Pad with zeros
         return id
 
@@ -230,5 +253,6 @@ api: v.{__version__}
 time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 root: {self.root_url}
 request_id: {self.getID()}
+hash: {self.hash}
 ```
 """
