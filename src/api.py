@@ -19,14 +19,16 @@ def test():
         try:
             data = json.loads(json_str)
             sasview_version = data.get('sasview_version')
-            file_hash = data.get('hash')
+            active_hash = data.get('active_hash')
+            base_hash = data.get('base_hash')
             author = data.get('author')
             changes = data.get('changes')
             branches_exist = data.get('branches_exist')
             
             # Print or return the extracted data for debugging
             print(f"SasView Version: {sasview_version}")
-            print(f"Hash: {file_hash}")
+            print(f"Active Hash: {active_hash}")
+            print(f"Base hash: {base_hash}")
             print(f"Author: {author}")
             print(f"Changes: {changes}")
             print(f"Branches Exist: {branches_exist}")
@@ -41,7 +43,15 @@ def test():
         file_text = file_storage.read().decode('utf-8')
         root_url = f"{request.scheme}://{request.host}/"
 
-        upload = GitHubUploader(filename, file_hash, file_text, sasview_version, author, changes, branches_exist[filename], root_url)
+        upload = GitHubUploader(filename=filename,
+                                active_hash=active_hash,
+                                base_hash=base_hash,
+                                file_text=file_text,
+                                sasview_version=sasview_version,
+                                author=author,
+                                changes=changes,
+                                branches_exist=branches_exist[filename],
+                                root_url=root_url)
         response = upload.response
 
     if response == None:

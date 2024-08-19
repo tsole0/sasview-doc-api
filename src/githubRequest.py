@@ -12,17 +12,19 @@ class GitHubUploader:
     """
 
     def __init__(self,
-                 filename,
-                 hash,
-                 file_text,
-                 sasview_version,
-                 author,
-                 changes,
-                 branches_exist,
-                 root_url):
+                 filename=None,
+                 active_hash=None,
+                 base_hash=None,
+                 file_text=None,
+                 sasview_version=None,
+                 author=None,
+                 changes=None,
+                 branches_exist=None,
+                 root_url=None):
 
         self.filename = filename
-        self.hash = hash
+        self.active_hash = active_hash # Can either be active or base hash. if branches_exist == True, then it is the base hash
+        self.base_hash = base_hash
         self.text = file_text
         self.version = sasview_version
         self.author = author
@@ -40,8 +42,13 @@ class GitHubUploader:
     def __main(self) -> None:
         commit_sha = self.getCommitShaFromTag(self.version, token=__api_key__)
         if self.branch_exist:
-            print(findBranch(self.hash))
-            pass
+            # Attempt to find the existing branch's name and create a new commit on it
+            existing_branch_name = findBranch(self.base_hash)
+            newData(self.filename, self.active_hash, existing_branch_name) # Create new row in database
+            url = f"https://api.github.com/repos/SasView/sasview/git/refs/heads/{existing_branch_name}"
+            latest_commit = self.getLatestSha(url)
+            self.commitNewVersion(existing_branch_name, self.text, latest_commit)
+            self.response = self.get_pull_request_url(existing_branch_name)
         else:
             if self.getOldVersion(commit_sha):
                 # Branch name must conform to github's branch naming conventions
@@ -66,6 +73,28 @@ class GitHubUploader:
                 return False
         return False
 
+    def get_pull_request_url(self, branch_name):
+        """Retrieve the URL of the pull request linked to the specified branch."""
+        url = f"https://api.github.com/repos/SasView/sasview/pulls"
+        headers = {
+            "Authorization": f"token {__api_key__}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        params = {
+            "head": f"SasView:{branch_name}",
+            "state": "open"
+        }
+
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+
+        pull_requests = response.json()
+        if pull_requests:
+            pr_url = pull_requests[0]["html_url"]
+            return pr_url
+        else:
+            return None
+
     def processVersioning(self, version: str):
         """
         Not a great way of processing versions but it works for now.
@@ -75,6 +104,17 @@ class GitHubUploader:
         if not version.startswith('v'):
             version = 'v' + version
         return version
+    
+    def getLatestSha(self, url):
+        """Get the latest commit SHA from the specified URL (branch)"""
+        headers = {
+            "Authorization": f"token {__api_key__}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        latest_commit_sha = response.json()["object"]["sha"]
+        return latest_commit_sha
 
     def processFileName(self, filename: str) -> str | None:
         """Return all of a filename after the 'user' directory.
@@ -214,7 +254,7 @@ class GitHubUploader:
 
     def getID(self):
         """Get unique ID for the request."""
-        id = newData(self.filename, self.hash, self.branch_name)
+        id = newData(self.filename, self.active_hash, self.branch_name)
         id = str(id).zfill(6) # Pad with zeros
         return id
 
@@ -253,6 +293,6 @@ api: v.{__version__}
 time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 root: {self.root_url}
 request_id: {self.getID()}
-hash: {self.hash}
+active_hash (first commit): {self.active_hash}
 ```
 """
